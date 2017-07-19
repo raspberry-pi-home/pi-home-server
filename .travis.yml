@@ -8,5 +8,6 @@ install:
 script:
 - python -m unittest
 notifications:
+  email: false
   slack:
     secure: CP033ciMSN9t3/4jIrcy3pP340+FC1oTkiHykyqvJcaOjjIEBPDCFpNeqS+7j+j9tN0SNfDnHhVP4bbJV0z5kKHQlPCtA4JxrBNBThd6SZhBSCAiiauwT0StT+IP/AQ66vEMOzh+AbgTdEjY7PUlk8Fg2d2DxFggVWRoRFHZAtBJrdx+jIqI59417WGXIzwPBeLBoTxHIXBPYqub+ggI6ut3wp/oMg/0WMyAKAc0rLUhKP7d0TZ+nL+IacKdv6zU0KBeL26HxLAxp+O23Zpu6/FYCh5CSfeLZ0b6fZZ5BX2IXsAPSJJMwtgKVR0WmGmotTDgfSvKjL+n41V0BCL/142ef0sSORokMu68u/XblJRVoTrO1yyFpdHCp+hwnjCowPAnD3gCp9g8/asHLWLhKfIFTfEH8umcxu5Vonuamx3W2GgJv1RHTOENlB/mx3VijdX0oyB85mGu5uJCF0eWXvjvFJpUmHOl4/4wHrI7b/jgJEHODXKb9K+7aZo6wvjxJEVgqJELqAFIaw1UhRcW/8wlLL2jRxjYowz3mpevpxArfaHAxbXJ3juVaablKvIwQA5Z+/MG1XSqq41oTS5uPVf+XXn5NqnfcT6gp4KPqf4DY1NulrETIYc+H67l17uvyOfJhendJhGVqOM+Xg/HS+20P0/raKjTPnaEvPUjK6w=
