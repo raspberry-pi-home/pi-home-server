@@ -3,3 +3,4 @@
 # alias to use python 3.5 inside ipython
 # alias ipy="python -c 'import IPython; IPython.terminal.ipapp.launch_new_instance()'"
 ipython
+ipdb

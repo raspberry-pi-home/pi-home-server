@@ -1,10 +1,7 @@
 import logging
 import uuid
 
-from aiohttp.web import (
-    HTTPFound,
-    View,
-)
+from aiohttp.web import View
 import aiohttp_jinja2
 import bcrypt
 import ujson
@@ -14,57 +11,81 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def _build_user_id(username):
+def _handle_error(request, template, error_message):
+    logger.error('%s', error_message)
+
+    context = {
+        'error': {
+            'message': error_message,
+        },
+    }
+    return aiohttp_jinja2.render_template(template, request, context)
+
+
+def _user_id(username):
     return 'user:{}'.format(username)
 
 
-def _handle_user(username, password, redis_pool):
+def _auth_token_id(auth_token):
+    return 'auth_token:{}'.format(auth_token)
+
+
+def _handle_user(username, password, request):
     if not username or not password:
-        logger.error('username or password not provided')
-        # TODO: hande error in template
-        return HTTPFound('/')
+        return _handle_error(request, 'index.html', 'username or password not provided')
+
+    redis_pool = request.app['redis_pool']
+    user_id = _user_id(username)
 
     logger.info('Processing request for user: \'%s\'', username)
-    user_id = 'user:{}'.format(username)
     if redis_pool.exists(user_id):
-        logger.info('User \'%s\' already exists on our database. Verifying if information matches', username)
-        user_string = redis_pool.get(user_id)
-        user = ujson.loads(user_string)
-        if (
-            username == user['username'] and
-            bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8'))
-        ):
-            return {
-                'username': user['username'],
-                'auth_token': user['auth_token'],
-            }
-        else:
-            logger.error('username or password not valid')
-            # TODO: hande error in template
-            return HTTPFound('/')
+        return _validate_user(username, password, request)
 
-    return _save_user(username, password, user_id, redis_pool)
+    return _save_user(username, password, request)
 
 
-def _save_user(username, password, user_id, redis_pool):
-    logger.info('Saving \'%s\' on database', username)
-    try:
-        user = ujson.dumps({
-            'username': username,
-            'password': bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()),
-            'auth_token': str(uuid.uuid4()),
-        })
+def _validate_user(username, password, request):
+    logger.info('User \'%s\' already exists on our database. Verifying if information matches', username)
 
-        redis_pool.set(user_id, user)
+    redis_pool = request.app['redis_pool']
+    user_id = _user_id(username)
 
+    user_string = redis_pool.get(user_id)
+    user = ujson.loads(user_string)
+
+    if (
+        username == user['username'] and
+        bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8'))
+    ):
         return {
             'username': user['username'],
             'auth_token': user['auth_token'],
         }
+    else:
+        return _handle_error(request, 'index.html', 'username or password not valid')
+
+
+def _save_user(username, password, request):
+    redis_pool = request.app['redis_pool']
+
+    logger.info('Saving \'%s\' on database', username)
+    try:
+        auth_token = str(uuid.uuid4())
+        user = ujson.dumps({
+            'username': username,
+            'password': bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()),
+            'auth_token': auth_token,
+        })
+
+        redis_pool.set(_user_id(username), user)
+        redis_pool.set(_auth_token_id(auth_token), username)
+
+        return {
+            'username': username,
+            'auth_token': auth_token,
+        }
     except Exception as e:
-        logger.error('Error saving user: \'%s\'. Error: %s', username, e)
-        # TODO: hande error in template
-        return HTTPFound('/')
+        return _handle_error(request, 'index.html', 'Error: {}'.format(e))
 
 
 class IndexView(View):
@@ -75,10 +96,9 @@ class IndexView(View):
 
     @aiohttp_jinja2.template('user.html')
     async def post(self):
-        redis_pool = self.request.app['redis_pool']
         form_data = await self.request.post()
 
         username = form_data['username']
         password = form_data['password']
 
-        return _handle_user(username, password, redis_pool)
+        return _handle_user(username, password, self.request)
