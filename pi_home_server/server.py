@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import redis
 import sys
 
 
@@ -20,31 +21,31 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def json_error(message, status):
-    logger.warning('Web server error: http=%s error=%s', status, message)
-    return Response(
-        status=status,
-        text='There was an error executing your request',
-    )
+# def json_error(message, status):
+#     logger.warning('Web server error: http=%s error=%s', status, message)
+#     return Response(
+#         status=status,
+#         text='There was an error executing your request',
+#     )
 
 
 # TODO: does this makes sense on a websocket
-async def error_middleware(web_app, handler):
-    async def middleware_handler(request):
-        try:
-            response = await handler(request)
-            # TODO: ?
-            # we don't care about WebSocketResponse (for now)
-            if isinstance(response, WebSocketResponse):
-                return response
-            if response.status == 200:
-                return response
-            return json_error(response.message, response.status)
-        except HTTPException as ex:
-            if ex.status != 200:
-                return json_error(ex.reason, ex.status)
-            raise
-    return middleware_handler
+# async def error_middleware(web_app, handler):
+#     async def middleware_handler(request):
+#         try:
+#             response = await handler(request)
+#             # TODO: ?
+#             # we don't care about WebSocketResponse (for now)
+#             if isinstance(response, WebSocketResponse):
+#                 return response
+#             if response.status == 200:
+#                 return response
+#             return json_error(response.message, response.status)
+#         except HTTPException as ex:
+#             if ex.status != 200:
+#                 return json_error(ex.reason, ex.status)
+#             raise
+#     return middleware_handler
 
 
 async def init_server(loop):
@@ -58,15 +59,20 @@ async def init_server(loop):
 
     host = config['app_settings']['host']
     port = config['app_settings']['port']
+    redis_pool = redis.from_url(
+        url=config['app_settings']['redis_url'],
+        db=config['app_settings']['redis_db'],
+    )
 
     logger.info('Building web application')
     web_app = Application(
         loop=loop,
-        middlewares=[
-            error_middleware,
-        ],
+        # middlewares=[
+        #     error_middleware,
+        # ],
     )
     web_app['websockets'] = []
+    web_app['redis_pool'] = redis_pool
 
     aiohttp_jinja2.setup(
         web_app,
@@ -80,7 +86,6 @@ async def init_server(loop):
 
     logger.info('Starting web server')
     web_app_handler = web_app.make_handler()
-    # TODO: get host and port from app config (?)
     web_server_generator = loop.create_server(
         web_app_handler,
         host=host,
