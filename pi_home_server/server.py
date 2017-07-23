@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 import sys
 
 
@@ -13,6 +12,7 @@ from aiohttp.web import (
 import aiohttp_jinja2
 import jinja2
 
+from pi_home_server.config import get_config
 from pi_home_server.server_routes import routes
 
 
@@ -47,7 +47,18 @@ async def error_middleware(web_app, handler):
     return middleware_handler
 
 
-async def init_server(host, port, loop):
+async def init_server(loop):
+    logger.info('Building configuration')
+    config = get_config()
+    if not config:
+        logger.info('Applicaion terminated')
+        sys.exit()
+
+    logger.info('App configuration: %s', config)
+
+    host = config['app_settings']['host']
+    port = config['app_settings']['port']
+
     logger.info('Building web application')
     web_app = Application(
         loop=loop,
@@ -98,11 +109,8 @@ async def shutdown(server, web_app, web_app_handler):
 def main():
     logger.info('Starting application')
 
-    host = '0.0.0.0'
-    port = os.environ.get('PORT', 8001)
-
     loop = asyncio.get_event_loop()
-    server_generator = init_server(host, port, loop)
+    server_generator = init_server(loop)
     web_server_generator, web_app_handler, web_app = loop.run_until_complete(server_generator)
     server = loop.run_until_complete(web_server_generator)
 
