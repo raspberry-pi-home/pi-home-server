@@ -1,7 +1,12 @@
+import json
 import logging
 import uuid
 
-from aiohttp.web import View
+from aiohttp.web import (
+    View,
+    WebSocketResponse,
+    WSMsgType,
+)
 import aiohttp_jinja2
 import bcrypt
 import ujson
@@ -22,70 +27,27 @@ def _handle_error(request, template, error_message):
     return aiohttp_jinja2.render_template(template, request, context)
 
 
-def _user_id(username):
-    return 'user:{}'.format(username)
+async def _websocket_message_handler(msg, ws_response, websockets, server_app):
+    logger.info('Got %s message from websocket', msg.data)
 
-
-def _auth_token_id(auth_token):
-    return 'auth_token:{}'.format(auth_token)
-
-
-def _handle_user(username, password, request):
-    if not username or not password:
-        return _handle_error(request, 'index.html', 'username or password not provided')
-
-    redis_pool = request.app['redis_pool']
-    user_id = _user_id(username)
-
-    logger.info('Processing request for user: \'%s\'', username)
-    if redis_pool.exists(user_id):
-        return _validate_user(username, password, request)
-
-    return _save_user(username, password, request)
-
-
-def _validate_user(username, password, request):
-    logger.info('User \'%s\' already exists on our database. Verifying if information matches', username)
-
-    redis_pool = request.app['redis_pool']
-    user_id = _user_id(username)
-
-    user_string = redis_pool.get(user_id)
-    user = ujson.loads(user_string)
-
-    if (
-        username == user['username'] and
-        bcrypt.checkpw(password.encode('utf-8'), user['password'].encode('utf-8'))
-    ):
-        return {
-            'username': user['username'],
-            'auth_token': user['auth_token'],
-        }
-    else:
-        return _handle_error(request, 'index.html', 'username or password not valid')
-
-
-def _save_user(username, password, request):
-    redis_pool = request.app['redis_pool']
-
-    logger.info('Saving \'%s\' on database', username)
+    # try to parse the message as json
     try:
-        auth_token = str(uuid.uuid4())
-        user = ujson.dumps({
-            'username': username,
-            'password': bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()),
-            'auth_token': auth_token,
-        })
+        data = msg.json()
+    except json.JSONDecodeError:
+        logger.warning('Unable to parse websocket json message')
 
-        redis_pool.set(_user_id(username), user)
-        redis_pool.set(_auth_token_id(auth_token), username)
+        # is message is not in a json format, we will do nothing
+        return ws_response
 
-        return {
-            'username': username,
-            'auth_token': auth_token,
-        }
-    except Exception as e:
-        return _handle_error(request, 'index.html', 'Error: {}'.format(e))
+    action, status = server_app.process_message(data, ws_response)
+
+    # respond with the status of the message
+    ws_response.send_json({
+        'action': '{action}_{status}'.format(
+            action=action,
+            status='ok' if bool(status) else 'not_ok',
+        )
+    })
 
 
 class IndexView(View):
@@ -96,9 +58,57 @@ class IndexView(View):
 
     @aiohttp_jinja2.template('user.html')
     async def post(self):
-        form_data = await self.request.post()
+        request = self.request
+        form_data = await request.post()
+        server_app = request.app['server_app']
 
         username = form_data['username']
         password = form_data['password']
 
-        return _handle_user(username, password, self.request)
+        try:
+            return server_app.handle_user(username, password)
+        except Exception as e:
+            return _handle_error(request, 'index.html', e.message)
+
+
+class WebSocketView(View):
+
+    async def get(self):
+        request = self.request
+        ws_response = WebSocketResponse()
+        ok, protocol = ws_response.can_prepare(request)
+        if not ok:
+            logger.info('Unable to prepare connection between server and websocket')
+            return ws_response
+
+        await ws_response.prepare(request)
+
+        try:
+            server_app = request.app['server_app']
+            websockets = request.app['websockets']
+            websockets.append(ws_response)
+
+            logger.info('A new websocket is connected, total: %s', len(websockets))
+
+            async for msg in ws_response:
+                # we only care about text messages
+                if msg.type == WSMsgType.TEXT:
+                    await _websocket_message_handler(
+                        msg,
+                        ws_response,
+                        websockets,
+                        server_app,
+                    )
+
+                else:
+                    return ws_response
+
+            return ws_response
+
+        finally:
+            server_app = request.app['server_app']
+            server_app.remove_client(ws_response)
+            websockets = request.app['websockets']
+            websockets.remove(ws_response)
+
+            logger.info('A websocket is disconnected, total: %s', len(websockets))

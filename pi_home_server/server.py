@@ -13,39 +13,13 @@ from aiohttp.web import (
 import aiohttp_jinja2
 import jinja2
 
+from pi_home_server.app import App
 from pi_home_server.config import get_config
 from pi_home_server.server_routes import routes
 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-
-# def json_error(message, status):
-#     logger.warning('Web server error: http=%s error=%s', status, message)
-#     return Response(
-#         status=status,
-#         text='There was an error executing your request',
-#     )
-
-
-# TODO: does this makes sense on a websocket
-# async def error_middleware(web_app, handler):
-#     async def middleware_handler(request):
-#         try:
-#             response = await handler(request)
-#             # TODO: ?
-#             # we don't care about WebSocketResponse (for now)
-#             if isinstance(response, WebSocketResponse):
-#                 return response
-#             if response.status == 200:
-#                 return response
-#             return json_error(response.message, response.status)
-#         except HTTPException as ex:
-#             if ex.status != 200:
-#                 return json_error(ex.reason, ex.status)
-#             raise
-#     return middleware_handler
 
 
 async def init_server(loop):
@@ -64,15 +38,15 @@ async def init_server(loop):
         db=config['app_settings']['redis_db'],
     )
 
+    logger.info('Building application')
+    server_app = App(redis_pool)
+
     logger.info('Building web application')
     web_app = Application(
         loop=loop,
-        # middlewares=[
-        #     error_middleware,
-        # ],
     )
     web_app['websockets'] = []
-    web_app['redis_pool'] = redis_pool
+    web_app['server_app'] = server_app
 
     aiohttp_jinja2.setup(
         web_app,
