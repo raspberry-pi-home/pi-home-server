@@ -158,6 +158,16 @@ class App:
 
         return True
 
+    @validate_role(config_constants.ROLE_WEB)
+    def action_get_board_status(self, action, data, message, client):
+        clients = self._get_user_clients_for_roles(client, (config_constants.ROLE_RASPBERRY,))
+
+        # forward the message to the clients
+        for _client in clients:
+            _client.send_json(message)
+
+        return True
+
     @validate_role(config_constants.ROLE_RASPBERRY)
     def action_board_status(self, action, data, message, client):
         clients = self._get_user_clients_for_roles(client, (config_constants.ROLE_WEB,))

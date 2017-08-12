@@ -42,12 +42,12 @@ async def _websocket_message_handler(msg, ws_response, websockets, server_app):
     action, status = server_app.process_message(data, ws_response)
 
     # respond with the status of the message
-    ws_response.send_json({
-        'action': '{action}_{status}'.format(
-            action=action,
-            status='ok' if bool(status) else 'not_ok',
-        )
-    })
+    # ws_response.send_json({
+    #     'action': '{action}_{status}'.format(
+    #         action=action,
+    #         status='ok' if bool(status) else 'not_ok',
+    #     )
+    # })
 
 
 class IndexView(View):
