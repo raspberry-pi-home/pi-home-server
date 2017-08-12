@@ -4,10 +4,7 @@ import uuid
 import bcrypt
 import ujson
 
-from pi_home_server.decorators import (
-    get_user_clients_for_roles,
-    validate_role,
-)
+from pi_home_server.decorators import validate_role
 import pi_home_server.config as config_constants
 import pi_home_server.exceptions as exceptions
 
@@ -20,6 +17,23 @@ class App:
     def __init__(self, redis_pool):
         self._redis_pool = redis_pool
         self._clients = {}
+
+    def _get_user_clients_for_roles(self, client, roles):
+
+        # verify if client is registered
+        ws_client = self._clients.get(client)
+        if not ws_client:
+            return []
+
+        # get all clients for user with role 'raspberry'
+        ws_username = ws_client['username']
+        clients = [
+            _client
+            for _client, _data in self._clients.items()
+            if _data['username'] == ws_username and _data['role'] in roles
+        ]
+
+        return clients
 
     def _user_id(self, username):
         return 'user:{}'.format(username)
@@ -135,8 +149,9 @@ class App:
         return True
 
     @validate_role(config_constants.ROLE_WEB)
-    @get_user_clients_for_roles(config_constants.ROLE_RASPBERRY)
-    def action_set_value(self, action, data, message, client, clients):
+    def action_set_value(self, action, data, message, client):
+        clients = self._get_user_clients_for_roles(client, (config_constants.ROLE_RASPBERRY,))
+
         # forward the message to the clients
         for _client in clients:
             _client.send_json(message)
@@ -144,8 +159,9 @@ class App:
         return True
 
     @validate_role(config_constants.ROLE_RASPBERRY)
-    @get_user_clients_for_roles(config_constants.ROLE_WEB)
-    def action_board_status(self, action, data, message, client, clients):
+    def action_board_status(self, action, data, message, client):
+        clients = self._get_user_clients_for_roles(client, (config_constants.ROLE_WEB,))
+
         # forward the message to the clients
         for _client in clients:
             _client.send_json(message)

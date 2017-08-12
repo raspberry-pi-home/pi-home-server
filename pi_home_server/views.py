@@ -100,9 +100,6 @@ class WebSocketView(View):
                         server_app,
                     )
 
-                else:
-                    return ws_response
-
             return ws_response
 
         finally:

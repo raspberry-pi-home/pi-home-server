@@ -3,7 +3,6 @@ import logging
 import redis
 import sys
 
-
 from aiohttp.web import (
     Application,
     HTTPException,
@@ -26,7 +25,7 @@ async def init_server(loop):
     logger.info('Building configuration')
     config = get_config()
     if not config:
-        logger.info('Applicaion terminated')
+        logger.info('Application terminated')
         sys.exit()
 
     logger.info('App configuration: %s', config)
@@ -37,6 +36,12 @@ async def init_server(loop):
         url=config['app_settings']['redis_url'],
         db=config['app_settings']['redis_db'],
     )
+    try:
+        redis_pool.ping()
+    except Exception:
+        logger.error('Redis unreachable')
+        logger.info('Application terminated')
+        sys.exit()
 
     logger.info('Building application')
     server_app = App(redis_pool)
@@ -102,4 +107,4 @@ def main():
         loop.run_until_complete(shutdown(server, web_app, web_app_handler))
         loop.close()
 
-    logger.info('Applicaion stopped')
+    logger.info('Application stopped')
