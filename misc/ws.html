@@ -7,6 +7,7 @@
         <script>
             window.onload = function() {
                 var socket = new WebSocket('ws://127.0.0.1:8001/ws');
+                // var socket = new WebSocket('wss://pi-home.herokuapp.com/ws');
                 window.socket = socket;
 
                 socket.addEventListener('open', function(event) {
